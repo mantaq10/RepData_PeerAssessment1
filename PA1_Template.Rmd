@@ -1,0 +1,114 @@
+# Reproducible Research: Peer Assessment 1
+
+```{r setoptions}
+library(knitr)
+opts_chunk$set(echo = TRUE)
+```
+
+## Loading and preprocessing the data
+```{r loading_data}
+rm(list = ls()) ##clear the environment
+
+activity = read.csv("./activity.csv", header=TRUE, 
+                    colClasses = c("numeric", "Date", "numeric"))
+```
+
+
+## What is mean total number of steps taken per day?
+```{r stepsPerDay}
+library(dplyr)
+
+stepsPerDay = activity %>%
+            group_by(date) %>%
+            summarise( totalSteps = sum(steps, na.rm=TRUE))
+paste("Mean # of Steps: ", round( mean(stepsPerDay$totalSteps), 1), " Median: ", round(median(stepsPerDay$totalSteps)));
+
+```
+
+```{r Histogram_stepsPerDay}
+library(ggplot2)
+p = ggplot(stepsPerDay, aes(x=totalSteps))
+p + geom_histogram(aes(y = ..count..), binwidth=2000) +
+    ggtitle("Steps Histogram") + 
+    xlab("Total Steps")
+```
+
+## What is the average daily activity pattern?
+
+```{r dailyIntervalActivity}
+
+dailyPattern = activity %>%
+    filter(! is.na(steps) ) %>%
+    group_by(interval) %>%
+    summarise(meanSteps = mean(steps) )
+
+
+p = ggplot(dailyPattern, aes(interval, meanSteps))
+p + geom_line() + 
+    ggtitle("Daily Interval Activity") +
+    ylab("Average Steps")
+
+```
+
+Maximum number of Steps:
+
+```{r getInterval}
+maxStep = dailyPattern %>%
+            arrange(desc(meanSteps), interval) %>%
+            head(1)
+maxStep
+
+```
+
+The interval is `r maxStep$interval`
+## Imputing missing values
+
+```{r}
+sum(is.na(activity$steps))
+```
+
+Normalizing the missing data with Average Values
+```{r }
+library(data.table)
+activity = as.data.table(activity)
+#filling the missing steps using the mean of steps for that interval
+normalizedMissingData = activity[, steps:=ifelse(is.na(.SD$steps), 
+                                               mean(.SD$steps, na.rm=TRUE), 
+                                               .SD$steps), 
+                                interval]
+```
+
+```{r Histogram_NormalizedData}
+stepsPerDayNormalized = normalizedMissingData %>%
+    group_by(date) %>%
+    summarise(totalSteps  = sum(steps))
+
+p = ggplot(stepsPerDayNormalized, aes(x=totalSteps))
+p+geom_histogram(aes(y=..count..), binwidth = 2000) + 
+    ggtitle("Total Steps Histogram") + 
+    xlab("Total Steps")
+
+paste("Mean # of Steps: ", round( mean(stepsPerDayNormalized$totalSteps), 1), 
+      " Median: ", round( median(stepsPerDayNormalized$totalSteps) ))
+```
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+```{r weekday_and_weekend_pattern}
+# set the locale
+#Sys.setlocale("LC_TIME", "C")
+
+#Categorize Days of Week and Plot
+wkdays = weekdays(normalizedMissingData$date, abbreviate=T)
+type = ifelse(wkdays %in% c("Sat", "Sun"), "Weekend", "Weekday" )
+
+weektype = normalizedMissingData %>% 
+    mutate(type = factor(type) ) %>%
+    group_by(interval, type) %>%
+    summarise(totalSteps = sum(steps))
+
+p = ggplot(weektype, aes(interval, totalSteps))
+p + geom_line() + facet_wrap(~type, ncol=1) + 
+    ggtitle("Weekend vs Weekday Activity") + 
+    ylab("Average Steps")
+```
